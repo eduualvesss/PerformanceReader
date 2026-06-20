@@ -1,157 +1,157 @@
 # Performance Recorder
 
-Mod Fabric para Minecraft **26.1.2** que registra o desempenho da sua máquina
-durante uma sessão de jogo (do momento em que você entra no mundo até o
-momento em que sai dele) e gera um relatório `.txt` detalhado, pensado para
-ser lido tanto por você quanto por uma IA (como o Claude), para ajudar a
-decidir quais mods ajustar ou quais configurações mudar.
+A Fabric mod for Minecraft **26.1.2** that records your machine's
+performance during a play session (from the moment you enter a world until
+the moment you leave it) and generates a detailed `.txt` report, designed
+to be read by both you and an AI (like Claude), to help decide which mods
+to tweak or which settings to change.
 
-## O que o mod faz
+## What the mod does
 
-- Detecta automaticamente quando você entra em um mundo (singleplayer ou
-  multiplayer) e começa a gravar.
-- A cada segundo, registra:
-  - FPS e tempo de quadro (frame time)
-  - TPS (ticks por segundo) e tempo médio de tick, calculado localmente
-  - Chunks carregados e número de entidades no mundo
-  - Uso de heap da JVM (RAM que o próprio Minecraft está usando)
-  - Uso de CPU e RAM de **toda a máquina** (via a biblioteca OSHI), não
-    apenas do processo do jogo
-  - Temperatura da CPU, quando o sensor está disponível
-- Quando você sai do mundo, gera automaticamente:
-  - `dados_brutos.csv`: todas as amostras, segundo a segundo
-  - `relatorio.txt`: um resumo legível, com estatísticas, uma linha do
-    tempo condensada e uma seção de "pontos de atenção" detectados
-    automaticamente (quedas de FPS, TPS baixo, heap perto do limite, etc.)
+- Automatically detects when you enter a world (singleplayer or
+  multiplayer) and starts recording.
+- Every second, it logs:
+  - FPS and frame time
+  - TPS (ticks per second) and average tick time, calculated locally
+  - Loaded chunks and entity count in the world
+  - JVM heap usage (RAM the Minecraft process itself is using)
+  - CPU and RAM usage for **the entire machine** (via the OSHI library),
+    not just the game process
+  - CPU temperature, when the sensor is available
+- When you leave the world, it automatically generates:
+  - `dados_brutos.csv`: every sample, second by second
+  - `relatorio.txt`: a readable summary, with statistics, a condensed
+    timeline, and an "attention points" section with automatically
+    detected issues (FPS drops, low TPS, heap nearing its limit, etc.)
 
-## O que o mod **não** faz
+## What the mod does **not** do
 
-Importante deixar claro: este mod só registra dados **reais** da sua
-máquina. Ele não tem como simular hardware que você não possui (por
-exemplo, "como seria o desempenho com uma RTX 4060" ou "com um Ryzen 5
-3600"). Simulações desse tipo são uma análise feita *depois*, por fora do
-mod — por exemplo, me mostrando o relatório gerado e pedindo para eu
-comparar com benchmarks conhecidos de outras peças de hardware.
+Important to make clear: this mod only records **real** data from your
+machine. It has no way to simulate hardware you don't own (for example,
+"what would performance look like with an RTX 4060" or "with a Ryzen 5
+3600"). Simulations like that are an analysis done *afterwards*, outside
+the mod — for example, by showing me the generated report and asking me to
+compare it against known benchmarks for other hardware.
 
-## Onde os relatórios são salvos
+## Where reports are saved
 
-Os relatórios são salvos em uma pasta `perfrecorder_reports/` dentro do
-diretório de onde o Minecraft é executado (normalmente a pasta `.minecraft`
-da sua instância, ou a pasta da instância do seu launcher, ex: pasta da
-instância no MultiMC/Prism Launcher).
+Reports are saved in a `perfrecorder_reports/` folder inside the directory
+Minecraft is run from (usually your instance's `.minecraft` folder, or
+your launcher's instance folder, e.g. the instance folder in
+MultiMC/Prism Launcher).
 
-Cada sessão gera uma subpasta com data, hora e nome do mundo, por exemplo:
+Each session generates a subfolder with the date, time, and world name,
+for example:
 
 ```
 perfrecorder_reports/
-└── 2026-06-20_14-30-00_MeuMundo/
+└── 2026-06-20_14-30-00_MyWorld/
     ├── relatorio.txt
     └── dados_brutos.csv
 ```
 
-## Requisitos
+## Requirements
 
 - **Minecraft**: 26.1.2
-- **Fabric Loader**: 0.18.4 ou superior
-- **Fabric API**: 0.152.1+26.1.2 (ou a versão correspondente a 26.1.2)
-- **Java**: 25 ou superior (tanto para jogar quanto para compilar)
+- **Fabric Loader**: 0.18.4 or higher
+- **Fabric API**: 0.152.1+26.1.2 (or the version matching 26.1.2)
+- **Java**: 25 or higher (both to play and to compile)
 
-⚠️ **Atenção ao Java 25**: a versão 26.1 do Minecraft exige Java 25 como
-mínimo. Isso é diferente do Java 21 normalmente usado em versões mais
-antigas. Verifique no seu launcher (ou nas configurações da instância) se
-ele está configurado para rodar com Java 25. Para compilar o mod você
-também precisa do **JDK** 25 completo instalado (não apenas o runtime que
-vem empacotado com o launcher).
+⚠️ **Java 25 note**: Minecraft version 26.1 requires Java 25 as a minimum.
+This is different from the Java 21 typically used in older versions.
+Check your launcher (or your instance settings) to confirm it's configured
+to run with Java 25. To compile the mod you'll also need the full **JDK**
+25 installed (not just the runtime bundled with the launcher).
 
-## Como compilar
+## How to build
 
-**Opção A — Abrindo no IntelliJ IDEA (mais simples):**
+**Option A — Opening in IntelliJ IDEA (simplest):**
 
-1. Instale o **JDK 25** e o **IntelliJ IDEA 2025.3+**.
-2. Abra a pasta do projeto no IntelliJ via `File > Open`.
-3. O IntelliJ deve detectar o `gradle-wrapper.properties` já incluído e
-   oferecer para baixar o Gradle 9.4.0 automaticamente e importar o
-   projeto. Aceite o download.
-4. Use o painel Gradle (lado direito) para rodar a tarefa `build`, ou rode
-   `./gradlew build` no terminal integrado depois da importação.
+1. Install **JDK 25** and **IntelliJ IDEA 2025.3+**.
+2. Open the project folder in IntelliJ via `File > Open`.
+3. IntelliJ should detect the included `gradle-wrapper.properties` and
+   offer to automatically download Gradle 9.4.0 and import the project.
+   Accept the download.
+4. Use the Gradle panel (right side) to run the `build` task, or run
+   `./gradlew build` in the integrated terminal after import finishes.
 
-**Opção B — Linha de comando:**
+**Option B — Command line:**
 
-1. Instale o **JDK 25** (ex: [Adoptium Temurin
+1. Install **JDK 25** (e.g. [Adoptium Temurin
    25](https://adoptium.net/temurin/releases/?version=25)).
-2. Instale o Gradle 9.4+ globalmente uma única vez (ex: via
+2. Install Gradle 9.4+ globally once (e.g. via
    [SDKMAN](https://sdkman.io/): `sdk install gradle 9.4.0`).
-3. Na pasta do projeto, rode `gradle wrapper --gradle-version 9.4.0` para
-   gerar o `gradlew`/`gradlew.bat`/`gradle-wrapper.jar` (esses arquivos
-   binários não vêm inclusos neste pacote).
-4. A partir daí, use `./gradlew build` (Linux/Mac) ou `gradlew.bat build`
-   (Windows) normalmente.
+3. In the project folder, run `gradle wrapper --gradle-version 9.4.0` to
+   generate `gradlew`/`gradlew.bat`/`gradle-wrapper.jar` (these binary
+   files aren't included in this package).
+4. From there on, use `./gradlew build` (Linux/Mac) or `gradlew.bat build`
+   (Windows) as usual.
 
-Em ambos os casos, o arquivo `.jar` final estará em
+In both cases, the final `.jar` file will be at
 `build/libs/perfrecorder-1.0.0.jar`.
 
-### Possíveis problemas na primeira compilação
+### Common first-build issues
 
-- **Erro de versão de Java**: confirme com `java -version` que está usando
-  o JDK 25. Se tiver várias versões instaladas, configure a variável
-  `JAVA_HOME` para apontar para o JDK 25 antes de rodar o Gradle.
-- **Erro ao baixar dependências**: o Gradle precisa de acesso à internet na
-  primeira execução para baixar o Minecraft, o Fabric Loader, a Fabric API
-  e a OSHI. Verifique sua conexão/firewall caso o build falhe nessa etapa.
-- **IntelliJ IDEA**: se for abrir o projeto no IntelliJ, é necessária a
-  versão 2025.3 ou superior para que os mixins/Java 25 funcionem
-  corretamente.
+- **Java version error**: confirm with `java -version` that you're using
+  JDK 25. If you have multiple versions installed, set the `JAVA_HOME`
+  environment variable to point to JDK 25 before running Gradle.
+- **Dependency download errors**: Gradle needs internet access on first
+  run to download Minecraft, Fabric Loader, the Fabric API, and OSHI.
+  Check your connection/firewall if the build fails at this stage.
+- **IntelliJ IDEA**: if opening the project in IntelliJ, version 2025.3 or
+  higher is required for mixins/Java 25 to work correctly.
 
-## Como instalar (depois de compilado)
+## How to install (once built)
 
-1. Copie `perfrecorder-1.0.0.jar` para a pasta `mods/` da sua instância do
-   Minecraft com Fabric.
-2. Certifique-se de que a **Fabric API** (versão `0.152.1+26.1.2` ou
-   equivalente) também está na pasta `mods/` — o Performance Recorder
-   depende dela.
-3. Inicie o Minecraft normalmente, usando o perfil Fabric para a versão
-   26.1.2.
+1. Copy `perfrecorder-1.0.0.jar` to the `mods/` folder of your Fabric
+   Minecraft instance.
+2. Make sure the **Fabric API** (version `0.152.1+26.1.2` or equivalent)
+   is also in the `mods/` folder — Performance Recorder depends on it.
+3. Start Minecraft normally, using the Fabric profile for version 26.1.2.
 
-## Como usar os relatórios para pedir ajustes
+## How to use the reports to request tweaks
 
-Depois de jogar uma sessão (entrar em um mundo e depois saí-lo, seja
-voltando ao menu ou fechando o jogo normalmente), abra a pasta
-`perfrecorder_reports/` mais recente e:
+After playing a session (entering a world and then leaving it, either by
+returning to the menu or closing the game normally), open the most recent
+`perfrecorder_reports/` folder and:
 
-1. Abra o arquivo `relatorio.txt` para uma visão geral rápida.
-2. Se quiser uma análise detalhada comigo (Claude), pode colar o conteúdo
-   do `relatorio.txt` na conversa, ou enviar o arquivo, junto com:
-   - Quais mods você está usando atualmente
-   - O que você quer melhorar (FPS, uso de memória, etc.)
-   - Se quiser, sua configuração de hardware atual e/ou hipotética que
-     queira comparar
+1. Open the `relatorio.txt` file for a quick overview.
+2. If you'd like a detailed analysis with me (Claude), you can paste the
+   contents of `relatorio.txt` into the conversation, or send the file,
+   along with:
+   - Which mods you're currently using
+   - What you want to improve (FPS, memory usage, etc.)
+   - If you'd like, your current and/or hypothetical hardware
+     configuration you want to compare against
 
-Com isso, posso sugerir ajustes de configuração, mods de otimização
-(como o Distant Horizons que você mencionou antes, Sodium, Lithium, etc.)
-ou mudanças de hardware com base em dados reais da sua sessão, em vez de
-suposições genéricas.
+With that, I can suggest configuration tweaks, optimization mods (like the
+Distant Horizons mod you mentioned earlier, Sodium, Lithium, etc.) or
+hardware changes based on real data from your session, rather than generic
+guesses.
 
-## Estrutura do projeto
+## Project structure
 
 ```
 src/main/java/com/eduualves/perfrecorder/
-├── PerfRecorderClient.java     # Entrypoint do mod, registra eventos da Fabric API
-├── SessionRecorder.java        # Gerencia o ciclo de vida de uma sessão de gravação
+├── PerfRecorderClient.java     # Mod entrypoint, registers Fabric API events
+├── SessionRecorder.java        # Manages the lifecycle of a recording session
 ├── data/
-│   └── PerformanceSample.java  # Representa uma amostra/snapshot de métricas
+│   └── PerformanceSample.java  # Represents a single metrics snapshot
 ├── report/
-│   └── ReportWriter.java       # Gera o relatorio.txt a partir das amostras
+│   └── ReportWriter.java       # Generates relatorio.txt from the samples
 └── util/
-    └── SystemInfoCollector.java # Encapsula o uso da OSHI (hardware real da máquina)
+    └── SystemInfoCollector.java # Wraps OSHI usage (the machine's real hardware)
 ```
 
-## Notas técnicas
+## Technical notes
 
-- O mod é **client-side only**: ele mede a experiência local do jogador, e
-  por isso funciona tanto em singleplayer quanto em qualquer servidor
-  multiplayer, sem precisar de nada instalado no lado do servidor.
-- A contagem de CPU/RAM da máquina usa a biblioteca
-  [OSHI](https://github.com/oshi/oshi), padrão da indústria para esse tipo
-  de coleta em Java, e funciona em Windows, Linux e macOS.
-- Todos os textos do relatório estão em português, já que o objetivo é
-  facilitar tanto a sua leitura quanto a análise posterior.
+- The mod is **client-side only**: it measures the local player's
+  experience, so it works in both singleplayer and any multiplayer server
+  without needing anything installed server-side.
+- Machine-wide CPU/RAM tracking uses the
+  [OSHI](https://github.com/oshi/oshi) library, the industry standard for
+  this kind of collection in Java, and works on Windows, Linux, and macOS.
+- The generated report files (`relatorio.txt`, `dados_brutos.csv`) keep
+  their Portuguese names and content, since that's the primary language
+  for reading and follow-up analysis; this README is the English-language
+  reference for the project itself.
