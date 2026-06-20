@@ -226,6 +226,10 @@ public class SessionRecorder {
             System.err.println("[PerfRecorder] Falha ao gerar relatório: " + e.getMessage());
         }
 
+        // Encerra o subprocesso do sensor de temperatura (se estiver ativo) para não
+        // deixar um processo CpuTempSensor.exe órfão rodando após a sessão terminar.
+        systemInfo.shutdown();
+
         return reportPath;
     }
 

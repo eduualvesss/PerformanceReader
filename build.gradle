@@ -57,6 +57,13 @@ processResources {
 
 // Na migração para 26.1, "remapJar" foi substituído por "jar" diretamente,
 // já que o jogo não usa mais ofuscação.
+// Inclui o sensor de temperatura (.NET, compilado separadamente - veja
+// sensors/CpuTempSensor/README.md) como recurso embutido no jar, em /sensors/.
+// O diretório sensors/CpuTempSensor/publish/ só existe depois que o .exe é
+// publicado manualmente (ou via CI); se ausente, o build do mod segue normalmente
+// e o mod cai no fallback do OSHI em tempo de execução.
+sourceSets.main.resources.srcDir("sensors/CpuTempSensor/publish")
+
 jar {
 	from("LICENSE") {
 		rename { "${it}_${project.archivesBaseName}" }

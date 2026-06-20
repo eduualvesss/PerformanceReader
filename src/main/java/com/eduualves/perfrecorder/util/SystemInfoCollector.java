@@ -23,6 +23,7 @@ public class SystemInfoCollector {
     private final GlobalMemory memory;
     private final Sensors sensors;
     private final OperatingSystem os;
+    private final LibreHardwareMonitorBridge temperatureBridge;
 
     private long[] previousTicks;
     private long[][] previousProcTicks;
@@ -36,6 +37,21 @@ public class SystemInfoCollector {
         this.os = systemInfo.getOperatingSystem();
         this.previousTicks = processor.getSystemCpuLoadTicks();
         this.previousProcTicks = processor.getProcessorCpuLoadTicks();
+
+        // OSHI lê temperatura via WMI (MSAcpi_ThermalZoneTemperature), que não funciona
+        // em diversas placas-mãe de terceiros (confirmado em testes com HUANANZHI X99,
+        // mesmo com privilégios de administrador). Como alternativa, tentamos um sensor
+        // dedicado baseado em LibreHardwareMonitorLib, que lê os registradores MSR
+        // diretamente via driver de kernel - o mesmo mecanismo usado por HWMonitor e
+        // MSI Afterburner/RivaTuner. Se essa ponte não puder ser iniciada por qualquer
+        // motivo, getCpuTemperatureCelsius() cai de volta para o OSHI automaticamente.
+        SensorResourceExtractor.ensureExtracted();
+        this.temperatureBridge = new LibreHardwareMonitorBridge().start();
+
+        // Salvaguarda: se o jogo for fechado abruptamente (crash, "Force Quit", etc.)
+        // sem que SessionRecorder.endSession() seja chamado, este hook garante que o
+        // subprocesso CpuTempSensor.exe não fique órfão consumindo o driver/recursos.
+        Runtime.getRuntime().addShutdownHook(new Thread(temperatureBridge::stop));
     }
 
     /** Retorna o uso de CPU total do sistema (0-100%) desde a última chamada. */
@@ -56,8 +72,31 @@ public class SystemInfoCollector {
         return percentages;
     }
 
-    /** Temperatura da CPU em Celsius, ou null se o sensor não estiver disponível (comum em alguns sistemas/VMs). */
+    /**
+     * Temperatura da CPU em Celsius, ou {@code null} se nenhuma fonte de leitura
+     * estiver disponível.
+     * <p>
+     * Ordem de tentativa:
+     * <ol>
+     *   <li>{@link LibreHardwareMonitorBridge} (lê MSR via driver de kernel) - mais
+     *       confiável, mas depende do sensor externo ter sido iniciado com sucesso;</li>
+     *   <li>OSHI via WMI - mantido como fallback para máquinas onde o WMI funciona
+     *       corretamente (ex.: muitos notebooks e placas OEM padrão).</li>
+     * </ol>
+     * Se ambas as fontes falharem, retorna {@code null} (mesmo comportamento de antes,
+     * para não quebrar o formato do CSV nem o restante do mod).
+     */
     public Double getCpuTemperatureCelsius() {
+        if (temperatureBridge.isAvailable()) {
+            Double bridgeTemp = temperatureBridge.getLastTemperature();
+            if (bridgeTemp != null) {
+                return bridgeTemp;
+            }
+            // Ponte ativa mas ainda sem leitura válida (ex.: primeiríssima amostra,
+            // antes do loop do sensor produzir a primeira linha) - tenta OSHI nesta
+            // amostra específica, sem desistir da ponte para as próximas.
+        }
+
         try {
             double temp = sensors.getCpuTemperature();
             if (temp <= 0) {
@@ -69,6 +108,11 @@ public class SystemInfoCollector {
             // lançar exceções em vez de simplesmente retornar 0. Tratamos como "indisponível".
             return null;
         }
+    }
+
+    /** Libera o subprocesso do sensor de temperatura, se estiver em execução. Chamar ao encerrar a sessão/mod. */
+    public void shutdown() {
+        temperatureBridge.stop();
     }
 
     public long getTotalRamMb() {
