@@ -47,6 +47,26 @@ dentro do jar final, em `/sensors/CpuTempSensor.exe`. Em tempo de execução,
 `config/perfrecorder/sensors/CpuTempSensor.exe` na primeira inicialização do
 mod, e `LibreHardwareMonitorBridge` o executa a partir daí.
 
+## Exigência de privilégio de administrador (confirmado em teste real)
+
+Em teste real (HUANANZHI X99 + Xeon E5-2670 v3), o sensor retornou `TEMP:NULL`
+em todas as amostras quando executado **sem** privilégios de administrador,
+mesmo com o driver abrindo sem erro (`READY` apareceu normalmente). Executando
+o mesmo binário em um terminal **como Administrador**, os valores de
+temperatura passaram a ser lidos corretamente.
+
+Isso significa que, na prática, **o launcher do Minecraft precisa ser
+executado como Administrador** para que esta funcionalidade produza dados.
+Isso é uma restrição do driver MSR/WinRing0 usado pelo LibreHardwareMonitorLib
+para acessar os registradores de temperatura - não há forma de contornar isso
+apenas via código, é uma exigência do próprio mecanismo de leitura em nível de
+kernel do Windows.
+
+Se o launcher não estiver elevado, o sensor continuará retornando `TEMP:NULL`
+em todas as amostras (não trava nem dá erro), e o mod cai no fallback do OSHI
+como já documentado abaixo - ou seja, o comportamento seguro permanece o
+mesmo, só não há nenhuma fonte adicional de temperatura disponível nesse caso.
+
 ## Comportamento de fallback
 
 Se o `.exe` não tiver sido publicado/embutido (por exemplo, durante

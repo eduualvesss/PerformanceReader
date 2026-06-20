@@ -65,11 +65,42 @@ internal static class Program
         };
         watcherThread.Start();
 
+        // Diagnóstico: se as primeiras N leituras consecutivas vierem vazias, é muito
+        // provável que o processo não esteja rodando com privilégio de administrador
+        // (confirmado em teste real: o driver abre sem erro, mas nenhum sensor MSR é
+        // populado sem elevação). Avisamos isso uma única vez em stderr - não afeta o
+        // protocolo em stdout, que o lado Java continua lendo normalmente.
+        const int consecutiveNullsBeforeWarning = 3;
+        var consecutiveNulls = 0;
+        var adminWarningPrinted = false;
+
         try
         {
             while (!stopRequested)
             {
                 double? temp = ReadCpuPackageTemperature(computer);
+
+                if (temp.HasValue)
+                {
+                    consecutiveNulls = 0;
+                }
+                else
+                {
+                    consecutiveNulls++;
+                    if (consecutiveNulls >= consecutiveNullsBeforeWarning && !adminWarningPrinted)
+                    {
+                        Console.Error.WriteLine(
+                            "AVISO: nenhum sensor de temperatura encontrado nas últimas "
+                            + consecutiveNullsBeforeWarning + " leituras. Isto geralmente "
+                            + "significa que o processo não está rodando como Administrador "
+                            + "(o driver MSR abre sem erro, mas não expõe sensores sem "
+                            + "elevação). Execute o launcher do Minecraft como Administrador "
+                            + "para habilitar esta leitura.");
+                        Console.Error.Flush();
+                        adminWarningPrinted = true;
+                    }
+                }
+
                 Console.WriteLine(temp.HasValue
                     ? $"TEMP:{temp.Value:F1}"
                     : "TEMP:NULL");
