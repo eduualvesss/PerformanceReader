@@ -1,0 +1,66 @@
+plugins {
+	id "net.fabricmc.fabric-loom" version "1.15-SNAPSHOT"
+	id "maven-publish"
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+	archivesName = project.archives_base_name
+}
+
+repositories {
+	// OSHI e suas dependências (slf4j) vêm do Maven Central, já incluso por padrão no Loom.
+	mavenCentral()
+}
+
+dependencies {
+	// Minecraft 26.1.2 já é distribuído com nomes oficiais (unobfuscated).
+	// NÃO incluir a dependência "mappings" - foi removida na migração para 26.1.
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+
+	// Fabric Loader e Fabric API
+	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+
+	// OSHI - biblioteca para ler CPU/RAM/disco do sistema operacional real
+	implementation "com.github.oshi:oshi-core:${project.oshi_version}"
+	implementation "org.slf4j:slf4j-api:${project.slf4j_version}"
+
+	// OSHI e suas dependências precisam ser incluídas dentro do .jar final do mod,
+	// já que não fazem parte do Minecraft nem do Fabric API.
+	include "com.github.oshi:oshi-core:${project.oshi_version}"
+	include "net.java.dev.jna:jna:5.18.1"
+	include "net.java.dev.jna:jna-platform:5.18.1"
+}
+
+java {
+	// Minecraft 26.1 exige Java 25 como mínimo.
+	sourceCompatibility = JavaVersion.VERSION_25
+	targetCompatibility = JavaVersion.VERSION_25
+	withSourcesJar()
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.encoding = "UTF-8"
+	it.options.release = 25
+}
+
+processResources {
+	inputs.property "version", project.version
+
+	filesMatching("fabric.mod.json") {
+		expand "version": project.version
+	}
+}
+
+// Na migração para 26.1, "remapJar" foi substituído por "jar" diretamente,
+// já que o jogo não usa mais ofuscação.
+jar {
+	from("LICENSE") {
+		rename { "${it}_${project.archivesBaseName}" }
+	}
+	// Garante que as dependências incluídas (OSHI/JNA) fiquem embutidas no jar final.
+	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}

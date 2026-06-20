@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "perfrecorder",
+  "version": "${version}",
+  "name": "Performance Recorder",
+  "description": "Registra o desempenho da máquina (FPS, TPS, CPU, RAM, chunks, entidades) durante uma sessão de mundo e gera um relatório .txt detalhado.",
+  "authors": [
+    "eduualvesss"
+  ],
+  "contact": {
+    "sources": "https://github.com/eduualvesss"
+  },
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.eduualves.perfrecorder.PerfRecorderClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.18.4",
+    "minecraft": "~26.1",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}
