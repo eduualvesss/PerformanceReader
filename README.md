@@ -1,157 +1,106 @@
 # Performance Recorder
 
-A Fabric mod for Minecraft **26.1.2** that records your machine's
-performance during a play session (from the moment you enter a world until
-the moment you leave it) and generates a detailed `.txt` report, designed
-to be read by both you and an AI (like Claude), to help decide which mods
-to tweak or which settings to change.
+A Fabric mod for **Minecraft 26.1.2** that records your machine's real performance during a play session — from the moment you enter a world to the moment you leave it — and generates a detailed `.txt` report designed to be read by a human (you) and an AI (used to analyze the data and suggest mod/config changes).
 
-## What the mod does
+This started as a practical tool to answer one question: *"Is it worth upgrading my CPU?"* — and ended up doubling as a small but complete real-world Java/Gradle/Fabric project.
 
-- Automatically detects when you enter a world (singleplayer or
-  multiplayer) and starts recording.
-- Every second, it logs:
-  - FPS and frame time
-  - TPS (ticks per second) and average tick time, calculated locally
-  - Loaded chunks and entity count in the world
-  - JVM heap usage (RAM the Minecraft process itself is using)
-  - CPU and RAM usage for **the entire machine** (via the OSHI library),
-    not just the game process
-  - CPU temperature, when the sensor is available
-- When you leave the world, it automatically generates:
-  - `dados_brutos.csv`: every sample, second by second
-  - `relatorio.txt`: a readable summary, with statistics, a condensed
-    timeline, and an "attention points" section with automatically
-    detected issues (FPS drops, low TPS, heap nearing its limit, etc.)
+## What it does
 
-## What the mod does **not** do
-
-Important to make clear: this mod only records **real** data from your
-machine. It has no way to simulate hardware you don't own (for example,
-"what would performance look like with an RTX 4060" or "with a Ryzen 5
-3600"). Simulations like that are an analysis done *afterwards*, outside
-the mod — for example, by showing me the generated report and asking me to
-compare it against known benchmarks for other hardware.
-
-## Where reports are saved
-
-Reports are saved in a `perfrecorder_reports/` folder inside the directory
-Minecraft is run from (usually your instance's `.minecraft` folder, or
-your launcher's instance folder, e.g. the instance folder in
-MultiMC/Prism Launcher).
-
-Each session generates a subfolder with the date, time, and world name,
-for example:
-
-```
-perfrecorder_reports/
-└── 2026-06-20_14-30-00_MyWorld/
-    ├── relatorio.txt
-    └── dados_brutos.csv
-```
+- Detects entering/leaving a world automatically (singleplayer or multiplayer), client-side only.
+- Samples once per second: FPS, frame time, TPS, tick time, loaded chunks, entity count, JVM heap usage, and full-system CPU/RAM/temperature (via [OSHI](https://github.com/oshi/oshi)).
+- Writes two files per session into a timestamped folder:
+  - `dados_brutos.csv` — raw, second-by-second data (written incrementally, so a crash doesn't lose the session).
+  - `relatorio.txt` — a human-readable report: machine specs, summary statistics, a condensed timeline, and automatically flagged issues (FPS/TPS drops).
+- Is intentionally **read-only with respect to your hardware** — it never simulates hardware you don't own. "What if I had CPU X" comparisons are done afterward, externally, by comparing the recorded data against known benchmarks (see [Comparing Hypothetical Hardware](#comparing-hypothetical-hardware) below).
 
 ## Requirements
 
-- **Minecraft**: 26.1.2
-- **Fabric Loader**: 0.18.4 or higher
-- **Fabric API**: 0.152.1+26.1.2 (or the version matching 26.1.2)
-- **Java**: 25 or higher (both to play and to compile)
+| Component | Version |
+|---|---|
+| Minecraft | 26.1.2 |
+| Fabric Loader | 0.18.4+ (tested with 0.19.3) |
+| Fabric API | 0.151.0+26.1.2 or 0.152.1+26.1.2 |
+| Java (build & run) | JDK 25 |
+| Gradle | 9.4+ (wrapper generates this automatically) |
 
-⚠️ **Java 25 note**: Minecraft version 26.1 requires Java 25 as a minimum.
-This is different from the Java 21 typically used in older versions.
-Check your launcher (or your instance settings) to confirm it's configured
-to run with Java 25. To compile the mod you'll also need the full **JDK**
-25 installed (not just the runtime bundled with the launcher).
+> Minecraft 26.1 requires **Java 25** specifically — make sure you have the full JDK installed, not just the launcher's bundled runtime.
 
-## How to build
+## Building from source
 
-**Option A — Opening in IntelliJ IDEA (simplest):**
+1. Install **JDK 25** ([Adoptium Temurin](https://adoptium.net/temurin/releases/?version=25) is a free, solid option).
+2. Open the project folder in **IntelliJ IDEA** (Community Edition is fine) and let it import as a Gradle project.
+3. If `gradlew`/`gradlew.bat` isn't present yet, generate it once with a system-installed Gradle:
+   ```
+   gradle wrapper --gradle-version 9.4.0
+   ```
+4. Build:
+   ```
+   ./gradlew build        # Linux/macOS
+   .\gradlew.bat build    # Windows
+   ```
+5. The finished mod jar appears at `build/libs/perfrecorder-1.0.0.jar`.
 
-1. Install **JDK 25** and **IntelliJ IDEA 2025.3+**.
-2. Open the project folder in IntelliJ via `File > Open`.
-3. IntelliJ should detect the included `gradle-wrapper.properties` and
-   offer to automatically download Gradle 9.4.0 and import the project.
-   Accept the download.
-4. Use the Gradle panel (right side) to run the `build` task, or run
-   `./gradlew build` in the integrated terminal after import finishes.
+### Known build pitfalls (and why they happen)
 
-**Option B — Command line:**
+These came up while building this exact project — leaving them here so they don't surprise you twice.
 
-1. Install **JDK 25** (e.g. [Adoptium Temurin
-   25](https://adoptium.net/temurin/releases/?version=25)).
-2. Install Gradle 9.4+ globally once (e.g. via
-   [SDKMAN](https://sdkman.io/): `sdk install gradle 9.4.0`).
-3. In the project folder, run `gradle wrapper --gradle-version 9.4.0` to
-   generate `gradlew`/`gradlew.bat`/`gradle-wrapper.jar` (these binary
-   files aren't included in this package).
-4. From there on, use `./gradlew build` (Linux/Mac) or `gradlew.bat build`
-   (Windows) as usual.
+- **`oshi-core` version conflicts with other mods.** Several popular mods (e.g. Bobby) also bundle OSHI. If two different OSHI versions end up on the classpath at once, you'll see a `Configuration conflict: there is more than one oshi.properties file` warning, often followed by a crash. Fix: align this mod's `oshi_version` in `gradle.properties` with whatever version the rest of your modpack already uses.
+- **`NoSuchMethodError: IsProcessorFeaturePresent` on Windows.** This method was only added to JNA in version **5.14.0**. If you bump `oshi-core` to a newer release without also bumping the bundled `jna`/`jna-platform` versions in the `include(...)` lines of `build.gradle`, the older JNA you're shipping silently wins on the classpath and OSHI crashes trying to call a method that doesn't exist in it. Fix: keep `jna`/`jna-platform` on a recent release (5.17.0+) alongside whatever `oshi-core` version you're using.
+- **`getCpuLoad()` doesn't exist on `OperatingSystemMXBean`.** The JVM's process CPU usage is exposed via `com.sun.management.OperatingSystemMXBean#getProcessCpuLoad()`, an OpenJDK-specific extended interface — not the plain `java.lang.management.OperatingSystemMXBean`. If both happen to be imported, Java throws an *ambiguous reference* error because the simple name collides; using the fully-qualified `com.sun.management.OperatingSystemMXBean` type for the field (with an explicit cast at construction) avoids the clash entirely.
+- **`getProcessorCpuLoadBetweenTicks` expects `long[][]`, not `long[]`.** OSHI distinguishes *aggregate system* CPU ticks (`long[]`, from `getSystemCpuLoadTicks()`) from *per-core* ticks (`long[][]`, from `getProcessorCpuLoadTicks()`). They are not interchangeable — keep two separate "previous ticks" fields if you need both system-wide and per-core load.
 
-In both cases, the final `.jar` file will be at
-`build/libs/perfrecorder-1.0.0.jar`.
+## Installation (playing, not developing)
 
-### Common first-build issues
+1. Install [Fabric Loader](https://fabricmc.net/use/installer/) for Minecraft 26.1.2.
+2. Drop both `perfrecorder-1.0.0.jar` and the matching **Fabric API** jar into your instance's `mods` folder.
+3. Launch the game using the Fabric 26.1.2 profile.
 
-- **Java version error**: confirm with `java -version` that you're using
-  JDK 25. If you have multiple versions installed, set the `JAVA_HOME`
-  environment variable to point to JDK 25 before running Gradle.
-- **Dependency download errors**: Gradle needs internet access on first
-  run to download Minecraft, Fabric Loader, the Fabric API, and OSHI.
-  Check your connection/firewall if the build fails at this stage.
-- **IntelliJ IDEA**: if opening the project in IntelliJ, version 2025.3 or
-  higher is required for mixins/Java 25 to work correctly.
+Reports are written to `<game_directory>/perfrecorder_reports/`. Note that the game directory depends on your launcher — for the vanilla launcher it's `.minecraft`, but alternative launchers (TLauncher, MultiMC, Prism, etc.) typically use their own folder structure under `%appdata%`.
 
-## How to install (once built)
+## Reading a report
 
-1. Copy `perfrecorder-1.0.0.jar` to the `mods/` folder of your Fabric
-   Minecraft instance.
-2. Make sure the **Fabric API** (version `0.152.1+26.1.2` or equivalent)
-   is also in the `mods/` folder — Performance Recorder depends on it.
-3. Start Minecraft normally, using the Fabric profile for version 26.1.2.
+Each session produces a folder named `<timestamp>_<world_name>` containing:
 
-## How to use the reports to request tweaks
+- **`relatorio.txt`** — start here. Machine specs, aggregate stats (min/avg/max/p95) for every tracked metric, a 10-second-interval timeline, and a short list of automatically detected issues (e.g. "FPS below 30 in N samples").
+- **`dados_brutos.csv`** — the full second-by-second data, useful for deeper analysis, spreadsheets, or feeding back into an AI conversation.
 
-After playing a session (entering a world and then leaving it, either by
-returning to the menu or closing the game normally), open the most recent
-`perfrecorder_reports/` folder and:
+### Known data quirks (as of v1.0.0)
 
-1. Open the `relatorio.txt` file for a quick overview.
-2. If you'd like a detailed analysis with me (Claude), you can paste the
-   contents of `relatorio.txt` into the conversation, or send the file,
-   along with:
-   - Which mods you're currently using
-   - What you want to improve (FPS, memory usage, etc.)
-   - If you'd like, your current and/or hypothetical hardware
-     configuration you want to compare against
+- **The first ~3–5 seconds of every session show `FPS=0`.** This is world-loading time (chunk generation, render setup), not a real performance drop — worth mentally discounting when reading the summary, since it can pull the FPS minimum down to 0 without reflecting an actual issue.
+- **`chunks_carregados` (loaded chunks) currently reports a constant, unchanging value across an entire session.** This is a known bug: the value is parsed defensively out of `Level#gatherChunkSourceStats()`'s debug string via a regex that grabs the first integer found, which doesn't reliably land on the actual loaded-chunk count. Treat this column as unreliable until fixed.
 
-With that, I can suggest configuration tweaks, optimization mods (like the
-Distant Horizons mod you mentioned earlier, Sodium, Lithium, etc.) or
-hardware changes based on real data from your session, rather than generic
-guesses.
+## Comparing hypothetical hardware
+
+The mod itself only ever records the hardware you actually have. To answer "what would this look like on a different CPU/GPU," the workflow is:
+
+1. Record a real session on your current hardware.
+2. Share `relatorio.txt` (and `dados_brutos.csv` for finer detail) with an AI assistant, or compare it manually against published benchmarks (PassMark, Cinebench, Geekbench, etc.) for the hardware you're considering.
+3. Treat the result as an **estimate**, not a measurement — single-thread vs. multi-thread differences, core/thread count changes, and per-mod threading behavior (chunk generation, networking, world-tick logic) can all shift the outcome in ways a simple percentage scaling won't capture.
+
+This project's own motivating use case was exactly this: deciding whether to move from a Xeon E5-2670 v3 to an AM4 Ryzen 5 2600, using a real recorded session as the baseline instead of guessing.
 
 ## Project structure
 
 ```
-src/main/java/com/eduualves/perfrecorder/
-├── PerfRecorderClient.java     # Mod entrypoint, registers Fabric API events
-├── SessionRecorder.java        # Manages the lifecycle of a recording session
-├── data/
-│   └── PerformanceSample.java  # Represents a single metrics snapshot
-├── report/
-│   └── ReportWriter.java       # Generates relatorio.txt from the samples
-└── util/
-    └── SystemInfoCollector.java # Wraps OSHI usage (the machine's real hardware)
+perfrecorder/
+├── build.gradle
+├── gradle.properties
+├── src/main/java/com/eduualves/perfrecorder/
+│   ├── PerfRecorderClient.java      # Entrypoint; registers Fabric lifecycle events
+│   ├── SessionRecorder.java          # Session lifecycle, sampling, raw CSV writing
+│   ├── data/PerformanceSample.java   # Single point-in-time snapshot
+│   ├── report/ReportWriter.java      # Generates relatorio.txt from collected samples
+│   └── util/SystemInfoCollector.java # OSHI wrapper for whole-machine hardware stats
+└── src/main/resources/
+    └── fabric.mod.json
 ```
 
-## Technical notes
+## Design notes
 
-- The mod is **client-side only**: it measures the local player's
-  experience, so it works in both singleplayer and any multiplayer server
-  without needing anything installed server-side.
-- Machine-wide CPU/RAM tracking uses the
-  [OSHI](https://github.com/oshi/oshi) library, the industry standard for
-  this kind of collection in Java, and works on Windows, Linux, and macOS.
-- The generated report files (`relatorio.txt`, `dados_brutos.csv`) keep
-  their Portuguese names and content, since that's the primary language
-  for reading and follow-up analysis; this README is the English-language
-  reference for the project itself.
+- **Client-side only.** This mod measures the local player's experience (FPS, your machine's CPU/RAM), so it doesn't need a server-side component and works out of the box in singleplayer.
+- **Defensive by design.** Every sampling pass and every event handler is wrapped in try/catch — a single failed reading (a flaky sensor, a missing API on some platform) should never crash the game or silently kill the rest of the recording session.
+- **No simulation inside the mod.** As covered above, "what if my hardware were different" is explicitly out of scope for the mod itself; it's a job for external analysis using the data the mod *does* collect.
+
+## License
+
+MIT — do whatever you'd like with it.
