@@ -145,6 +145,25 @@ public class SessionRecorder {
             long ramTotal = systemInfo.getTotalRamMb();
             Double cpuTemp = systemInfo.getCpuTemperatureCelsius();
 
+            // Métricas adicionais via LibreHardwareMonitor (podem ser null se o sensor
+            // dedicado não estiver disponível - ver SystemInfoCollector para detalhes).
+            Double cpuCoreVoltage = systemInfo.getCpuCoreVoltage();
+            Double cpuPackagePower = systemInfo.getCpuPackagePowerWatts();
+            Double cpuClock = systemInfo.getCpuClockMhz();
+
+            Double gpuTemp = systemInfo.getGpuTemperatureCelsius();
+            Double gpuCoreClock = systemInfo.getGpuCoreClockMhz();
+            Double gpuMemClock = systemInfo.getGpuMemoryClockMhz();
+            Double gpuCoreVoltage = systemInfo.getGpuCoreVoltage();
+            Double gpuLoad = systemInfo.getGpuLoadPercent();
+            Double gpuPower = systemInfo.getGpuPowerWatts();
+            Double gpuMemUsed = systemInfo.getGpuMemoryUsedMb();
+            Double gpuMemTotal = systemInfo.getGpuMemoryTotalMb();
+            Double gpuFanRpm = systemInfo.getGpuFanRpm();
+
+            Double ramClock = systemInfo.getRamClockMhz();
+            Double ramVoltage = systemInfo.getRamVoltage();
+
             PerformanceSample sample = new PerformanceSample(
                     secondsSinceStart,
                     System.currentTimeMillis(),
@@ -161,7 +180,21 @@ public class SessionRecorder {
                     perCore,
                     ramUsed,
                     ramTotal,
-                    cpuTemp
+                    cpuTemp,
+                    cpuCoreVoltage,
+                    cpuPackagePower,
+                    cpuClock,
+                    gpuTemp,
+                    gpuCoreClock,
+                    gpuMemClock,
+                    gpuCoreVoltage,
+                    gpuLoad,
+                    gpuPower,
+                    gpuMemUsed,
+                    gpuMemTotal,
+                    gpuFanRpm,
+                    ramClock,
+                    ramVoltage
             );
 
             samples.add(sample);

@@ -8,22 +8,33 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
- * Gerencia o subprocesso externo {@code CpuTempSensor.exe}, responsável por ler a
- * temperatura da CPU via LibreHardwareMonitorLib quando a leitura padrão via OSHI/WMI
- * não está disponível (situação comum em diversas placas-mãe de terceiros).
+ * Gerencia o subprocesso externo {@code CpuTempSensor.exe}, responsável por ler, via
+ * LibreHardwareMonitorLib, métricas de hardware que a OSHI não consegue obter de forma
+ * confiável (temperatura de CPU em diversas placas-mãe de terceiros) ou que a OSHI não
+ * expõe de forma alguma (voltagem do core da CPU, e a maior parte das métricas de
+ * GPU/RAM: clocks, voltagem, temperatura, uso de VRAM, etc).
  * <p>
  * Funcionamento:
  * <ul>
  *   <li>Na construção, tenta localizar e iniciar o executável dentro da pasta do mod;</li>
  *   <li>Uma thread daemon lê continuamente o stdout do processo e mantém apenas a
- *       última leitura em uma referência atômica (não há necessidade de histórico aqui,
- *       quem grava o histórico é o {@code SessionRecorder});</li>
+ *       última amostra completa em uma referência atômica (não há necessidade de
+ *       histórico aqui, quem grava o histórico é o {@code SessionRecorder});</li>
  *   <li>Se o processo não puder ser iniciado (executável ausente, driver indisponível,
  *       falha de permissão, etc.), a ponte simplesmente fica "indisponível" - o chamador
- *       deve então recorrer ao fallback do OSHI. Nenhuma exceção é propagada.</li>
+ *       deve então recorrer ao fallback do OSHI (apenas para CPU/RAM básicos; GPU
+ *       detalhada e voltagem de CPU não têm fallback, por não serem expostas pela OSHI).
+ *       Nenhuma exceção é propagada.</li>
  * </ul>
+ * <p>
+ * Protocolo: cada linha de dados do subprocesso vem como {@code DATA:<json>}, um objeto
+ * JSON plano (sem aninhamento) com chaves fixas - ver o lado C# ({@code Program.cs}) para
+ * a lista completa. Chaves ausentes significam "sensor indisponível nesta amostra" e são
+ * tratadas exatamente como um valor {@code null}.
  * <p>
  * Esta classe NUNCA deve travar o jogo nem a sessão de gravação: qualquer falha aqui é
  * tratada como "sensor indisponível", nunca como erro fatal.
@@ -33,10 +44,40 @@ public class LibreHardwareMonitorBridge {
     private static final String EXECUTABLE_NAME = "CpuTempSensor.exe";
     private static final long READY_TIMEOUT_MS = 5_000;
 
+    /** Casa pares "chave":valor_numerico dentro do JSON plano emitido pelo sensor. */
+    private static final Pattern NUMBER_FIELD = Pattern.compile("\"(\\w+)\":(-?\\d+(?:\\.\\d+)?)");
+    /** Casa pares "chave":"valor_string" (usado apenas para gpu_name). */
+    private static final Pattern STRING_FIELD = Pattern.compile("\"(\\w+)\":\"((?:[^\"\\\\]|\\\\.)*)\"");
+
     private Process process;
     private OutputStream processStdin;
-    private final AtomicReference<Double> lastTemperature = new AtomicReference<>(null);
+    private final AtomicReference<HardwareSnapshot> lastSnapshot = new AtomicReference<>(HardwareSnapshot.EMPTY);
     private volatile boolean available = false;
+
+    /**
+     * Snapshot imutável da última amostra completa recebida do sensor .NET. Qualquer
+     * campo pode ser {@code null} caso o sensor correspondente não esteja disponível
+     * naquele instante (ex.: GPU não detectada, voltagem não exposta pela placa-mãe).
+     */
+    public static final class HardwareSnapshot {
+        static final HardwareSnapshot EMPTY = new HardwareSnapshot(java.util.Map.of());
+
+        private final java.util.Map<String, Object> fields;
+
+        private HardwareSnapshot(java.util.Map<String, Object> fields) {
+            this.fields = fields;
+        }
+
+        public Double getDouble(String key) {
+            Object v = fields.get(key);
+            return v instanceof Double ? (Double) v : null;
+        }
+
+        public String getString(String key) {
+            Object v = fields.get(key);
+            return v instanceof String ? (String) v : null;
+        }
+    }
 
     /**
      * Tenta iniciar o subprocesso sensor. Retorna a própria instância para permitir
@@ -48,7 +89,8 @@ public class LibreHardwareMonitorBridge {
             Path exePath = locateExecutable();
             if (exePath == null) {
                 System.out.println("[PerfRecorder] CpuTempSensor.exe não encontrado; "
-                        + "temperatura via LibreHardwareMonitor desabilitada (fallback para OSHI).");
+                        + "temperatura/voltagem de CPU e métricas de GPU via LibreHardwareMonitor "
+                        + "desabilitadas (fallback para OSHI nas métricas que a OSHI suporta).");
                 return this;
             }
 
@@ -88,7 +130,8 @@ public class LibreHardwareMonitorBridge {
             readerThread.setDaemon(true);
             readerThread.start();
 
-            System.out.println("[PerfRecorder] Sensor de temperatura via LibreHardwareMonitor ativo.");
+            System.out.println("[PerfRecorder] Sensor de hardware via LibreHardwareMonitor ativo "
+                    + "(CPU temp/voltagem, GPU, RAM).");
         } catch (IOException e) {
             System.out.println("[PerfRecorder] Não foi possível iniciar CpuTempSensor.exe ("
                     + e.getMessage() + "); fallback para OSHI.");
@@ -101,24 +144,20 @@ public class LibreHardwareMonitorBridge {
         try {
             String line;
             while ((line = reader.readLine()) != null) {
-                if (line.startsWith("TEMP:")) {
-                    String value = line.substring("TEMP:".length());
-                    if ("NULL".equals(value)) {
-                        lastTemperature.set(null);
-                    } else {
-                        try {
-                            lastTemperature.set(Double.parseDouble(value));
-                        } catch (NumberFormatException ignored) {
-                            // linha malformada isolada; ignora e segue lendo
-                        }
+                if (line.startsWith("DATA:")) {
+                    String json = line.substring("DATA:".length());
+                    try {
+                        lastSnapshot.set(parseSnapshot(json));
+                    } catch (RuntimeException ignored) {
+                        // linha malformada isolada; ignora e segue lendo, mantendo o
+                        // último snapshot válido conhecido em vez de zerá-lo.
                     }
                 }
                 // outras linhas (ex.: ERROR: tardio) são ignoradas aqui silenciosamente -
                 // já tratamos a inicialização acima; falhas após start() apenas resultam
-                // em "lastTemperature" parar de ser atualizado, e isAvailable() permanece
-                // true mas getTemperature() pode retornar um valor "congelado". Isso é
-                // aceitável: o chamador sempre pode comparar o timestamp se quiser maior
-                // rigor, mas para o caso de uso atual (1 amostra/segundo) é suficiente.
+                // em "lastSnapshot" parar de ser atualizado, e isAvailable() permanece
+                // true mas getLastSnapshot() pode retornar um valor "congelado". Isso é
+                // aceitável: para o caso de uso atual (1 amostra/segundo) é suficiente.
             }
         } catch (IOException e) {
             // Processo provavelmente morreu; marca como indisponível para que o
@@ -127,9 +166,38 @@ public class LibreHardwareMonitorBridge {
         }
     }
 
-    /** Última temperatura conhecida (Celsius), ou {@code null} se indisponível. */
-    public Double getLastTemperature() {
-        return available ? lastTemperature.get() : null;
+    /**
+     * Faz o parsing do objeto JSON plano emitido pelo sensor (sem aninhamento, apenas
+     * pares chave/número ou chave/string). Implementado com expressões regulares simples
+     * em vez de uma biblioteca JSON completa, já que o formato é deliberadamente raso e
+     * controlado por nós dos dois lados (C# e Java) do mesmo mod.
+     */
+    private static HardwareSnapshot parseSnapshot(String json) {
+        java.util.Map<String, Object> fields = new java.util.HashMap<>();
+
+        Matcher numbers = NUMBER_FIELD.matcher(json);
+        while (numbers.find()) {
+            try {
+                fields.put(numbers.group(1), Double.parseDouble(numbers.group(2)));
+            } catch (NumberFormatException ignored) {
+                // campo malformado isolado; ignora apenas este campo
+            }
+        }
+
+        Matcher strings = STRING_FIELD.matcher(json);
+        while (strings.find()) {
+            String value = strings.group(2)
+                    .replace("\\\"", "\"")
+                    .replace("\\\\", "\\");
+            fields.put(strings.group(1), value);
+        }
+
+        return new HardwareSnapshot(fields);
+    }
+
+    /** Última amostra completa conhecida, vinda do sensor .NET. Nunca retorna {@code null}. */
+    public HardwareSnapshot getLastSnapshot() {
+        return available ? lastSnapshot.get() : HardwareSnapshot.EMPTY;
     }
 
     public boolean isAvailable() {

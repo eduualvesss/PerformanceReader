@@ -84,7 +84,13 @@ public class ReportWriter {
         line(w, "Núcleos lógicos      : " + systemInfo.getLogicalCoreCount());
         line(w, String.format(Locale.US, "Frequência máxima    : %.2f GHz", systemInfo.getMaxCpuFreqGhz()));
         line(w, "RAM total            : " + systemInfo.getTotalRamMb() + " MB");
+
+        String bridgeGpuName = systemInfo.getGpuNameFromBridge();
         line(w, "GPU(s)               : " + systemInfo.getGpuInfo());
+        if (bridgeGpuName != null) {
+            line(w, "GPU monitorada (LHM) : " + bridgeGpuName);
+        }
+
         line(w, "Placa-mãe/Fabricante : " + systemInfo.getManufacturerAndModel());
         line(w, "Sistema operacional  : " + systemInfo.getOsName());
         line(w, "");
@@ -137,6 +143,82 @@ public class ReportWriter {
         long ramTotal = samples.get(0).systemRamTotalMb;
         line(w, String.format(Locale.US, "RAM total do sistema           : %d MB", ramTotal));
         line(w, "");
+
+        // --- Bloco de métricas detalhadas de CPU (via LibreHardwareMonitor) ---
+        // Cada bloco só é impresso se houver pelo menos uma amostra com leitura válida -
+        // caso contrário, a métrica simplesmente não esteve disponível nesta sessão
+        // (sensor não compilado/embutido, ou jogo sem privilégio de administrador).
+        boolean anyCpuExtra = writeOptionalStatBlock(w, "Voltagem do core da CPU",
+                samples.stream().map(s -> s.cpuCoreVoltageV), "V");
+        anyCpuExtra |= writeOptionalStatBlock(w, "Potência da CPU (package)",
+                samples.stream().map(s -> s.cpuPackagePowerW), "W");
+        anyCpuExtra |= writeOptionalStatBlock(w, "Clock dos núcleos da CPU",
+                samples.stream().map(s -> s.cpuClockMhz), "MHz");
+        if (!anyCpuExtra) {
+            line(w, "(Voltagem/potência/clock detalhados de CPU indisponíveis nesta sessão -");
+            line(w, " sensor LibreHardwareMonitor não ativo ou jogo sem privilégio de Administrador.)");
+        }
+        line(w, "");
+
+        // --- Bloco de métricas de GPU (via LibreHardwareMonitor) ---
+        line(w, "-- GPU " + "-".repeat(71));
+        boolean anyGpu = writeOptionalStatBlock(w, "Temperatura da GPU",
+                samples.stream().map(s -> s.gpuTemperatureCelsius), "°C");
+        anyGpu |= writeOptionalStatBlock(w, "Clock do núcleo da GPU",
+                samples.stream().map(s -> s.gpuCoreClockMhz), "MHz");
+        anyGpu |= writeOptionalStatBlock(w, "Clock da memória (VRAM)",
+                samples.stream().map(s -> s.gpuMemoryClockMhz), "MHz");
+        anyGpu |= writeOptionalStatBlock(w, "Voltagem do core da GPU",
+                samples.stream().map(s -> s.gpuCoreVoltageV), "V");
+        anyGpu |= writeOptionalStatBlock(w, "Uso (load) da GPU",
+                samples.stream().map(s -> s.gpuLoadPercent), "%");
+        anyGpu |= writeOptionalStatBlock(w, "Potência da GPU",
+                samples.stream().map(s -> s.gpuPowerW), "W");
+        anyGpu |= writeOptionalStatBlock(w, "VRAM usada",
+                samples.stream().map(s -> s.gpuMemoryUsedMb), "MB");
+        anyGpu |= writeOptionalStatBlock(w, "Cooler(s) da GPU",
+                samples.stream().map(s -> s.gpuFanRpm), "RPM");
+        Double vramTotal = samples.stream().map(s -> s.gpuMemoryTotalMb)
+                .filter(java.util.Objects::nonNull).findFirst().orElse(null);
+        if (vramTotal != null) {
+            line(w, String.format(Locale.US, "VRAM total                      : %.0f MB", vramTotal));
+            anyGpu = true;
+        }
+        if (!anyGpu) {
+            line(w, "(Métricas de GPU indisponíveis nesta sessão - sensor LibreHardwareMonitor");
+            line(w, " não ativo, GPU não detectada, ou jogo sem privilégio de Administrador.)");
+        }
+        line(w, "");
+
+        // --- Bloco de métricas detalhadas de RAM (via LibreHardwareMonitor) ---
+        line(w, "-- RAM " + "-".repeat(71));
+        boolean anyRamExtra = writeOptionalStatBlock(w, "Clock da RAM",
+                samples.stream().map(s -> s.ramClockMhz), "MHz");
+        anyRamExtra |= writeOptionalStatBlock(w, "Voltagem da RAM (DRAM)",
+                samples.stream().map(s -> s.ramVoltageV), "V");
+        if (!anyRamExtra) {
+            line(w, "(Clock/voltagem de RAM indisponíveis nesta sessão - a placa-mãe pode não");
+            line(w, " expor esses sensores ao LibreHardwareMonitor, ou o sensor não está ativo.)");
+        }
+        line(w, "");
+    }
+
+    /**
+     * Calcula e imprime um bloco de estatísticas para uma métrica opcional (cujas
+     * amostras podem conter {@code null}). Amostras {@code null} são simplesmente
+     * ignoradas no cálculo - elas representam "sensor indisponível naquele instante",
+     * não um valor zero. Retorna {@code false} sem imprimir nada se não houver
+     * nenhuma leitura válida na sessão inteira.
+     */
+    private boolean writeOptionalStatBlock(BufferedWriter w, String label,
+                                            java.util.stream.Stream<Double> values, String unit) throws IOException {
+        double[] valid = values.filter(java.util.Objects::nonNull).mapToDouble(Double::doubleValue).toArray();
+        if (valid.length == 0) {
+            return false;
+        }
+        Stats stats = Stats.of(java.util.Arrays.stream(valid));
+        writeStatBlock(w, label, stats, unit);
+        return true;
     }
 
     private void writeStatBlock(BufferedWriter w, String label, Stats s, String unit) throws IOException {
@@ -229,6 +311,18 @@ public class ReportWriter {
             line(w, String.format(Locale.US,
                     "- Pico de %d entidades renderizadas simultaneamente - verifique acúmulo de mobs/itens.",
                     maxEntities));
+            foundAny = true;
+        }
+
+        // Temperatura da GPU constantemente alta (limiar conservador; varia por modelo)
+        long gpuHot = samples.stream()
+                .filter(s -> s.gpuTemperatureCelsius != null && s.gpuTemperatureCelsius > 85.0)
+                .count();
+        if (gpuHot > 0) {
+            double pct = 100.0 * gpuHot / samples.size();
+            line(w, String.format(Locale.US,
+                    "- Temperatura da GPU acima de 85°C em %.1f%% da sessão - verifique refrigeração/throttling.",
+                    pct));
             foundAny = true;
         }
 
